@@ -1,0 +1,11 @@
+# GitHub 上的 IPv6 列表
+https://raw.githubusercontent.com/ymyuuu/IPDB/refs/heads/main/BestCF/bestcfv6.txt
+# "https://raw.githubusercontent.com/another/repo/main/ipv6.txt"
+
+# CloudFlare IPv6 官方列表
+# "https://www.cloudflare.com/ips-v6"
+
+# 直接添加一些IPv6地址
+2400:cb00::/32
+2606:4700:0:6ce2:e496:d046:beb3:7cd6
+
