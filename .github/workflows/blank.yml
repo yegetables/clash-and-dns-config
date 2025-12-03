@@ -1,0 +1,91 @@
+name: Update CloudFlare IP Ranges
+
+on:
+  schedule:
+    # 每天 UTC 时间 
+    - cron: '24 3 * * *'
+  workflow_dispatch:  # 允许手动触发
+  push:
+    branches: [ main, master ]
+    paths:
+      - '.github/workflows/cfips.yml'
+
+jobs:
+  update-ips:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+
+    - name: Download CloudFlare IPv4 ranges
+      run: |
+        curl -s "https://www.cloudflare.com/ips-v4" -o cfipv4.txt
+        echo "Downloaded IPv4 ranges: $(wc -l < cfipv4.txt) lines"
+
+    - name: Download CloudFlare IPv6 ranges
+      run: |
+        curl -s "https://www.cloudflare.com/ips-v6" -o cfipv6.txt
+        echo "Downloaded IPv6 ranges: $(wc -l < cfipv6.txt) lines"
+
+    - name: Merge and process IP ranges
+      run: |
+        # 使用 awk 确保每行都处理
+        awk 'NF {print $0}' cfipv4.txt cfipv6.txt > cfips.txt
+        
+        # 创建版本号（使用日期时间）
+        echo "Generated at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > version.txt
+        echo "IPv4 count: $(wc -l < cfipv4.txt)" >> version.txt
+        echo "IPv6 count: $(wc -l < cfipv6.txt)" >> version.txt
+        echo "Total count: $(wc -l < cfips.txt)" >> version.txt
+
+    - name: Display merged results
+      run: |
+        echo "=== Merged IP Ranges Preview ==="
+        head -10 cfips.txt
+        echo "..."
+        tail -10 cfips.txt
+        echo ""
+        echo "=== Statistics ==="
+        cat version.txt
+
+    - name: Check for changes
+      id: check_changes
+      run: |
+        # 检查文件是否有变化
+        git add cfipv4.txt cfipv6.txt cfips.txt version.txt
+        if git diff --cached --quiet; then
+          echo "No changes detected"
+          echo "has_changes=false" >> $GITHUB_OUTPUT
+        else
+          echo "Changes detected"
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+          echo "timestamp=$(date -u '+%Y%m%d_%H%M%S')" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Commit and push changes
+      if: steps.check_changes.outputs.has_changes == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git commit -m "Update CloudFlare IP ranges ($(date -u '+%Y-%m-%d %H:%M:%S UTC'))
+        
+        - Total IP ranges: $(wc -l < cfips.txt)
+        - IPv4: $(wc -l < cfipv4.txt)
+        - IPv6: $(wc -l < cfipv6.txt)"
+        git push origin HEAD:${{ github.ref_name }}
+        echo "Changes pushed to repository"
+
+    - name: Upload IP files as artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: cloudflare-ip-ranges
+        path: |
+          cfipv4.txt
+          cfipv6.txt
+          cfips.txt
+          version.txt
+        retention-days: 30
