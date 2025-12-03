@@ -1,10 +1,11 @@
-name: Process IPv6 Addresses (Enhanced)
+name: Process IPv6 Addresses
 
 on:
   schedule:
     - cron: '0 */6 * * *'  # 每6小时运行一次
   workflow_dispatch:
   push:
+    branches: [ main, master ]
     paths:
       - '.github/workflows/process-ipv6.yml'
 
@@ -46,8 +47,8 @@ jobs:
         echo "  行数: $(wc -l < "$ORIGINAL_FILE")"
         echo "  大小: $(wc -c < "$ORIGINAL_FILE") 字节"
         
-        # 改进的 IPv6 处理脚本
-        cat > process_ipv6.sh << 'EOF'
+        # 创建处理脚本
+        cat << 'SCRIPT_EOF' > process_ipv6.sh
 #!/bin/bash
 
 input_file="$1"
@@ -84,7 +85,7 @@ while IFS= read -r line || [ -n "$line" ]; do
 done < "$input_file"
 
 echo "✅ 处理完成: 输出了 $processed_count 个 IPv6 地址"
-EOF
+SCRIPT_EOF
         
         chmod +x process_ipv6.sh
         
@@ -99,16 +100,27 @@ EOF
         echo "--- 后5行 ---"
         tail -5 "$PROCESSED_FILE"
         
-    - name: Commit changes
+        echo "📊 处理完成统计:"
+        echo "  原始行数: $(wc -l < "$ORIGINAL_FILE")"
+        echo "  处理后行数: $(wc -l < "$PROCESSED_FILE")"
+
+    - name: Generate README
       run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        
-        if git diff --quiet; then
-          echo "🔄 没有检测到变化，跳过提交"
-        else
-          git add -A
-          git commit -m "chore: update processed IPv6 addresses [$(date +%Y-%m-%d)]"
-          git push
-          echo "✅ 已提交更新"
-        fi
+        # 生成 README 文件
+        cat > README_IPV6.md << 'EOF'
+# IPv6 Address Processing Results
+
+## 更新信息
+- **最后更新时间**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+- **原始文件**: [bestcfv6_original.txt](bestcfv6_original.txt)
+- **处理后文件**: [ipv6_dealwith_ips.txt](ipv6_dealwith_ips.txt)
+
+## 统计信息
+- 原始 IPv6 地址数: $(wc -l < bestcfv6_original.txt)
+- 处理后的地址数: $(wc -l < ipv6_dealwith_ips.txt)
+
+## 处理说明
+将普通的 IPv6 地址转换为 `[IPv6]:443` 格式，用于代理或防火墙规则配置。
+
+## 文件格式示例
+### 原始格式
