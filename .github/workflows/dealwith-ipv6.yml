@@ -1,4 +1,4 @@
-name: Process IPv6 Addresses
+name: Process Multiple IPv6 Sources
 
 on:
   schedule:
@@ -8,6 +8,7 @@ on:
     branches: [ main, master ]
     paths:
       - '.github/workflows/process-ipv6.yml'
+      - 'best_cf_ipv6.txt'
 
 permissions:
   contents: write
@@ -20,49 +21,106 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Download and process IPv6
+    - name: Read and process multiple sources
       run: |
         set -e
         
-        # 配置
-        SOURCE_URL="https://raw.githubusercontent.com/ymyuuu/IPDB/refs/heads/main/BestCF/bestcfv6.txt"
-        ORIGINAL_FILE="bestcfv6_original.txt"
-        PROCESSED_FILE="ipv6_dealwith_ips.txt"
+        # 配置文件
+        SOURCE_LIST="best_cf_ipv6.txt"
+        TEMP_FILE="ipv6_temp.txt"
+        OUTPUT_FILE="ipv6_dealwith_ips.txt"
+        PROCESSED_SOURCES="processed_sources.txt"
         
-        echo "🔗 下载源: $SOURCE_URL"
+        # 清空临时文件和输出文件
+        > "$TEMP_FILE"
+        > "$OUTPUT_FILE"
+        > "$PROCESSED_SOURCES"
         
-        # 下载原始文件
-        curl -s -f "$SOURCE_URL" -o "$ORIGINAL_FILE" || {
-          echo "❌ 下载失败"
-          exit 1
-        }
+        echo "📋 开始处理源文件: $SOURCE_LIST"
+        echo "源文件内容:"
+        cat "$SOURCE_LIST"
+        echo ""
         
-        # 验证文件内容
-        if [ ! -s "$ORIGINAL_FILE" ]; then
-          echo "❌ 下载的文件为空"
-          exit 1
+        # 计数器
+        source_count=0
+        total_ip_count=0
+        
+        # 逐行读取源文件
+        while IFS= read -r line || [ -n "$line" ]; do
+          # 清理行：去除前后空格、引号
+          clean_line=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
+          
+          # 跳过空行和注释行
+          if [ -z "$clean_line" ] || [[ "$clean_line" == \#* ]]; then
+            echo "跳过: $line"
+            continue
+          fi
+          
+          source_count=$((source_count + 1))
+          echo "处理源 $source_count: $clean_line"
+          
+          # 判断是URL还是直接IP地址
+          if [[ "$clean_line" =~ ^https?:// ]] || [[ "$clean_line" =~ ^raw\.githubusercontent\.com ]]; then
+            # 是URL链接
+            echo "  类型: URL链接"
+            echo "  下载中..."
+            
+            # 尝试下载
+            if curl -s -f "$clean_line" >> "$TEMP_FILE"; then
+              downloaded_count=$(wc -l < "$TEMP_FILE" | awk -v prev=$total_ip_count '{print $1 - prev}')
+              echo "  下载成功: 新增 $downloaded_count 个地址"
+              echo "[URL] $clean_line -> $downloaded_count 地址" >> "$PROCESSED_SOURCES"
+            else
+              echo "  ❌ 下载失败: $clean_line"
+              echo "[URL失败] $clean_line" >> "$PROCESSED_SOURCES"
+            fi
+            
+          elif [[ "$clean_line" =~ [a-fA-F0-9:]+ ]]; then
+            # 可能是直接IPv6地址
+            echo "  类型: 直接IPv6地址"
+            echo "$clean_line" >> "$TEMP_FILE"
+            echo "[直接IP] $clean_line" >> "$PROCESSED_SOURCES"
+            echo "  添加直接地址: $clean_line"
+            
+          else
+            echo "  ⚠️  无法识别的格式: $clean_line"
+            echo "[未知格式] $clean_line" >> "$PROCESSED_SOURCES"
+          fi
+          
+          total_ip_count=$(wc -l < "$TEMP_FILE")
+          echo "  当前累计地址数: $total_ip_count"
+          echo ""
+          
+        done < "$SOURCE_LIST"
+        
+        # 去重并处理IPv6地址
+        if [ -s "$TEMP_FILE" ]; then
+          echo "🔄 正在处理并去重IPv6地址..."
+          
+          # 去重并排序
+          sort -u "$TEMP_FILE" > "${TEMP_FILE}.sorted"
+          mv "${TEMP_FILE}.sorted" "$TEMP_FILE"
+          
+          # 使用sed处理IPv6地址格式
+          sed -E '/^$/d; s/^([0-9a-fA-F:]*::[0-9a-fA-F:]+|[0-9a-fA-F:]+::[0-9a-fA-F:]*|([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4})$/[\1]:443/' "$TEMP_FILE" > "$OUTPUT_FILE"
+          
+          # 统计最终结果
+          original_count=$(wc -l < "$TEMP_FILE")
+          final_count=$(wc -l < "$OUTPUT_FILE")
+          
+          echo "📊 处理完成统计:"
+          echo "  处理的源数量: $source_count"
+          echo "  去重前地址数: $total_ip_count"
+          echo "  去重后地址数: $original_count"
+          echo "  最终输出地址数: $final_count"
+          
+        else
+          echo "❌ 没有处理任何有效的IPv6地址"
+          echo "空文件" > "$OUTPUT_FILE"
         fi
         
-        echo "📊 原始文件信息:"
-        echo "  行数: $(wc -l < "$ORIGINAL_FILE")"
-        echo "  大小: $(wc -c < "$ORIGINAL_FILE") 字节"
-        
-        # 直接使用 sed 处理，避免复杂的 heredoc
-        echo "🔄 正在处理 IPv6 地址..."
-        
-        # 使用你的原始 sed 命令
-        sed -E '/^$/d; s/^([0-9a-fA-F:]*::[0-9a-fA-F:]+|[0-9a-fA-F:]+::[0-9a-fA-F:]*|([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4})$/[\1]:443/' "$ORIGINAL_FILE" > "$PROCESSED_FILE"
-        
-        # 显示结果
-        echo "📋 结果预览:"
-        echo "--- 前5行 ---"
-        head -5 "$PROCESSED_FILE"
-        echo "--- 后5行 ---"
-        tail -5 "$PROCESSED_FILE"
-        
-        echo "📊 处理完成统计:"
-        echo "  原始行数: $(wc -l < "$ORIGINAL_FILE")"
-        echo "  处理后行数: $(wc -l < "$PROCESSED_FILE")"
+        # 清理临时文件
+        rm -f "$TEMP_FILE"
 
     - name: Generate README
       run: |
@@ -71,27 +129,42 @@ jobs:
         echo "" >> README_IPV6.md
         echo "## 更新信息" >> README_IPV6.md
         echo "- **最后更新时间**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> README_IPV6.md
-        echo "- **原始文件**: [bestcfv6_original.txt](bestcfv6_original.txt)" >> README_IPV6.md
+        echo "- **源配置文件**: [best_cf_ipv6.txt](best_cf_ipv6.txt)" >> README_IPV6.md
         echo "- **处理后文件**: [ipv6_dealwith_ips.txt](ipv6_dealwith_ips.txt)" >> README_IPV6.md
         echo "" >> README_IPV6.md
         echo "## 统计信息" >> README_IPV6.md
-        echo "- 原始 IPv6 地址数: $(wc -l < bestcfv6_original.txt)" >> README_IPV6.md
-        echo "- 处理后的地址数: $(wc -l < ipv6_dealwith_ips.txt)" >> README_IPV6.md
+        echo "- 最终IPv6地址数: $(wc -l < ipv6_dealwith_ips.txt)" >> README_IPV6.md
         echo "" >> README_IPV6.md
-        echo "## 处理说明" >> README_IPV6.md
-        echo "将普通的 IPv6 地址转换为 \`[IPv6]:443\` 格式，用于代理或防火墙规则配置。" >> README_IPV6.md
-        echo "" >> README_IPV6.md
+        
+        # 如果有处理源记录，添加处理详情
+        if [ -f processed_sources.txt ] && [ -s processed_sources.txt ]; then
+          echo "## 处理详情" >> README_IPV6.md
+          cat processed_sources.txt >> README_IPV6.md
+          echo "" >> README_IPV6.md
+        fi
+        
         echo "## 文件格式示例" >> README_IPV6.md
-        echo "### 原始格式" >> README_IPV6.md
+        echo "### 源配置文件格式" >> README_IPV6.md
         echo '```' >> README_IPV6.md
-        head -3 bestcfv6_original.txt | sed 's/^/  /' >> README_IPV6.md
+        echo '# 支持多种格式，每行一个源' >> README_IPV6.md
+        echo '"https://raw.githubusercontent.com/example/ipv6.txt"  # 带引号的URL' >> README_IPV6.md
+        echo 'https://raw.githubusercontent.com/example/ipv6.txt   # 不带引号的URL' >> README_IPV6.md
+        echo '2400:cb00::/32                                        # 直接IPv6地址' >> README_IPV6.md
+        echo '2606:4700::/32' >> README_IPV6.md
+        echo '# 注释行会被忽略' >> README_IPV6.md
         echo '```' >> README_IPV6.md
         echo "" >> README_IPV6.md
+        
         echo "### 处理后格式" >> README_IPV6.md
         echo '```' >> README_IPV6.md
-        head -3 ipv6_dealwith_ips.txt | sed 's/^/  /' >> README_IPV6.md
+        if [ -s ipv6_dealwith_ips.txt ]; then
+          head -5 ipv6_dealwith_ips.txt | sed 's/^/  /' >> README_IPV6.md
+        else
+          echo "# 暂无数据" >> README_IPV6.md
+        fi
         echo '```' >> README_IPV6.md
         echo "" >> README_IPV6.md
+        
         echo "## 使用场景" >> README_IPV6.md
         echo "1. **代理配置**: 用于 Clash、V2Ray 等代理软件的规则配置" >> README_IPV6.md
         echo "2. **防火墙规则**: 用于配置防火墙的允许/拒绝规则" >> README_IPV6.md
@@ -106,17 +179,16 @@ jobs:
         git config user.email "github-actions[bot]@users.noreply.github.com"
         
         # 检查是否有变化
-        git add bestcfv6_original.txt ipv6_dealwith_ips.txt README_IPV6.md
+        git add ipv6_dealwith_ips.txt README_IPV6.md processed_sources.txt
         
         if git diff --cached --quiet; then
           echo "🔄 没有检测到变化，跳过提交"
         else
-          original_count=$(wc -l < bestcfv6_original.txt)
-          processed_count=$(wc -l < ipv6_dealwith_ips.txt)
-          git commit -m "chore: update processed IPv6 addresses
+          final_count=$(wc -l < ipv6_dealwith_ips.txt 2>/dev/null || echo "0")
+          git commit -m "chore: update processed IPv6 addresses from multiple sources
         
-          - Original: $original_count addresses
-          - Processed: $processed_count addresses
+          - Total addresses: $final_count
+          - Sources: from best_cf_ipv6.txt
           - Format: [IPv6]:443
           - Time: $(date +'%Y-%m-%d %H:%M')"
           git push
