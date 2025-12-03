@@ -1,7 +1,7 @@
 # IPv6 Address Processing Results
 
 ## 更新信息
-- **最后更新时间**: 2025-12-03 10:07:39 UTC
+- **最后更新时间**: 2025-12-03 10:10:47 UTC
 - **源配置文件**: [best_cf_ipv6.txt](best_cf_ipv6.txt)
 - **处理后文件**: [ipv6_dealwith_ips.txt](ipv6_dealwith_ips.txt)
 
@@ -10,7 +10,6 @@
 
 ## 处理详情
 [URL] https://raw.githubusercontent.com/ymyuuu/IPDB/refs/heads/main/BestCF/bestcfv6.txt -> 10 地址
-[直接IP] 2400:cb00::/32
 [直接IP] 2606:4700:0:6ce2:e496:d046:beb3:7cd6
 
 ## 文件格式示例
@@ -26,11 +25,11 @@ https://raw.githubusercontent.com/example/ipv6.txt   # 不带引号的URL
 
 ### 处理后格式
 ```
-  2400:cb00::/32
-  [2606:4700:0:67:bc03:6e20:32fa:61bb]:443
-  [2606:4700:0:67:bcc6:4aa3:14c3:7c26]:443
+  [2606:4700:0:4e1c:cc70:3755:fb4c:9c2d]:443
+  [2606:4700:0:4eb8:5783:b4b4:c9df:e188]:443
   [2606:4700:0:6ce2:e496:d046:beb3:7cd6]:443
-  [2606:4700:0:9703:5e39:96f6:fa10:bc58]:443
+  [2606:4700:0:8ca4:10b:c62:9ae5:2556]:443
+  [2606:4700:0:8ca4:1ba2:735f:2808:44b1]:443
 ```
 
 ## 使用场景
