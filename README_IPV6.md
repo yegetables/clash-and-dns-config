@@ -1,30 +1,36 @@
 # IPv6 Address Processing Results
 
 ## 更新信息
-- **最后更新时间**: 2025-12-03 09:54:58 UTC
-- **原始文件**: [bestcfv6_original.txt](bestcfv6_original.txt)
+- **最后更新时间**: 2025-12-03 10:07:39 UTC
+- **源配置文件**: [best_cf_ipv6.txt](best_cf_ipv6.txt)
 - **处理后文件**: [ipv6_dealwith_ips.txt](ipv6_dealwith_ips.txt)
 
 ## 统计信息
-- 原始 IPv6 地址数: 10
-- 处理后的地址数: 10
+- 最终IPv6地址数: 11
 
-## 处理说明
-将普通的 IPv6 地址转换为 `[IPv6]:443` 格式，用于代理或防火墙规则配置。
+## 处理详情
+[URL] https://raw.githubusercontent.com/ymyuuu/IPDB/refs/heads/main/BestCF/bestcfv6.txt -> 10 地址
+[直接IP] 2400:cb00::/32
+[直接IP] 2606:4700:0:6ce2:e496:d046:beb3:7cd6
 
 ## 文件格式示例
-### 原始格式
+### 源配置文件格式
 ```
-  2606:4700::4c69:a6cf:641b:2710
-  2606:4700:0:9703:5e39:96f6:fafb:73e8
-  2606:4700:0:67:bc03:6e20:32fa:61bb
+# 支持多种格式，每行一个源
+"https://raw.githubusercontent.com/example/ipv6.txt"  # 带引号的URL
+https://raw.githubusercontent.com/example/ipv6.txt   # 不带引号的URL
+2400:cb00::/32                                        # 直接IPv6地址
+2606:4700::/32
+# 注释行会被忽略
 ```
 
 ### 处理后格式
 ```
-  [2606:4700::4c69:a6cf:641b:2710]:443
-  [2606:4700:0:9703:5e39:96f6:fafb:73e8]:443
+  2400:cb00::/32
   [2606:4700:0:67:bc03:6e20:32fa:61bb]:443
+  [2606:4700:0:67:bcc6:4aa3:14c3:7c26]:443
+  [2606:4700:0:6ce2:e496:d046:beb3:7cd6]:443
+  [2606:4700:0:9703:5e39:96f6:fa10:bc58]:443
 ```
 
 ## 使用场景
