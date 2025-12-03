@@ -6,6 +6,5 @@ https://raw.githubusercontent.com/ymyuuu/IPDB/refs/heads/main/BestCF/bestcfv6.tx
 # "https://www.cloudflare.com/ips-v6"
 
 # 直接添加一些IPv6地址
-2400:cb00::/32
 2606:4700:0:6ce2:e496:d046:beb3:7cd6
 
