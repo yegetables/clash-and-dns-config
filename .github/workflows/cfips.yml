@@ -2,7 +2,7 @@ name: Update CloudFlare IP Ranges
 
 on:
   schedule:
-    # 每天 UTC 时间 
+    # 每天 UTC 时间 3:24 执行 (对应 UTC+8 时间 11:24)
     - cron: '24 3 * * *'
   workflow_dispatch:  # 允许手动触发
   push:
@@ -21,71 +21,180 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
 
+    - name: Setup UTC+8 timezone for logging
+      run: |
+        echo "TZ=Asia/Shanghai" >> $GITHUB_ENV
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Workflow started"
+
     - name: Download CloudFlare IPv4 ranges
       run: |
-        curl -s "https://www.cloudflare.com/ips-v4" -o cfipv4.txt
-        echo "Downloaded IPv4 ranges: $(wc -l < cfipv4.txt) lines"
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Downloading CloudFlare IPv4 ranges..."
+        curl -s "https://www.cloudflare.com/ips-v4" -o cfips/cfipv4.txt
+        ipv4_count=$(wc -l < cfips/cfipv4.txt)
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Downloaded $ipv4_count IPv4 ranges"
 
     - name: Download CloudFlare IPv6 ranges
       run: |
-        curl -s "https://www.cloudflare.com/ips-v6" -o cfipv6.txt
-        echo "Downloaded IPv6 ranges: $(wc -l < cfipv6.txt) lines"
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Downloading CloudFlare IPv6 ranges..."
+        curl -s "https://www.cloudflare.com/ips-v6" -o cfips/cfipv6.txt
+        ipv6_count=$(wc -l < cfips/cfipv6.txt)
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Downloaded $ipv6_count IPv6 ranges"
 
-    - name: Merge and process IP ranges
+    - name: Merge IP ranges to cfips.txt
       run: |
-        # 使用 awk 确保每行都处理
-        awk 'NF {print $0}' cfipv4.txt cfipv6.txt > cfips.txt
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Merging IPv4 and IPv6 ranges..."
+        # 合并并清理数据
+        cat cfips/cfipv4.txt cfips/cfipv6.txt | awk 'NF && !/^#/ && !/^\s*$/ {print $0}' | sort -u > cfips/cfips.txt
+        total_count=$(wc -l < cfips/cfips.txt)
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Merged complete: $total_count total ranges"
+
+    - name: Generate statistics for logging
+      run: |
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Generating statistics..."
+        timestamp=$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')
+        ipv4_count=$(wc -l < cfips/cfipv4.txt)
+        ipv6_count=$(wc -l < cfips/cfipv6.txt)
+        total_count=$(wc -l < cfips/cfips.txt)
         
-        # 创建版本号（使用日期时间）
-        echo "Generated at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > version.txt
-        echo "IPv4 count: $(wc -l < cfipv4.txt)" >> version.txt
-        echo "IPv6 count: $(wc -l < cfipv6.txt)" >> version.txt
-        echo "Total count: $(wc -l < cfips.txt)" >> version.txt
-
-    - name: Display merged results
-      run: |
-        echo "=== Merged IP Ranges Preview ==="
-        head -10 cfips.txt
-        echo "..."
-        tail -10 cfips.txt
+        echo "=== CloudFlare IP Ranges Statistics ==="
+        echo "Update time: $timestamp"
+        echo "IPv4 ranges: $ipv4_count"
+        echo "IPv6 ranges: $ipv6_count"
+        echo "Total ranges: $total_count"
         echo ""
-        echo "=== Statistics ==="
-        cat version.txt
+        
+        # 保存到临时文件用于后续步骤
+        echo "$ipv4_count" > /tmp/ipv4_count.txt
+        echo "$ipv6_count" > /tmp/ipv6_count.txt
+        echo "$total_count" > /tmp/total_count.txt
+        echo "$timestamp" > /tmp/timestamp.txt
+
+    - name: Preview file contents
+      run: |
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] File preview:"
+        echo ""
+        echo "=== cfipv4.txt (first 5 lines) ==="
+        head -5 cfips/cfipv4.txt
+        echo ""
+        echo "=== cfipv6.txt (first 5 lines) ==="
+        head -5 cfips/cfipv6.txt
+        echo ""
+        echo "=== cfips.txt (first 10 lines) ==="
+        head -10 cfips/cfips.txt
+        echo ""
+        echo "=== File sizes ==="
+        ls -lh cfips/
 
     - name: Check for changes
       id: check_changes
       run: |
-        # 检查文件是否有变化
-        git add cfipv4.txt cfipv6.txt cfips.txt version.txt
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Checking for file changes..."
+        
+        # 添加要跟踪的文件
+        git add cfips/cfipv4.txt cfips/cfipv6.txt cfips/cfips.txt
+        
+        # 检查是否有变更
         if git diff --cached --quiet; then
-          echo "No changes detected"
+          echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] No changes detected in IP files"
           echo "has_changes=false" >> $GITHUB_OUTPUT
+          echo "status=no_changes" >> $GITHUB_OUTPUT
         else
-          echo "Changes detected"
+          echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Changes detected in IP files"
           echo "has_changes=true" >> $GITHUB_OUTPUT
-          echo "timestamp=$(date -u '+%Y%m%d_%H%M%S')" >> $GITHUB_OUTPUT
+          echo "status=changes_found" >> $GITHUB_OUTPUT
+          timestamp=$(TZ=Asia/Shanghai date '+%Y%m%d_%H%M%S')
+          echo "timestamp=$timestamp" >> $GITHUB_OUTPUT
+          
+          # 显示变更摘要
+          echo "Changes summary:"
+          git diff --cached --name-only
+          echo ""
+          echo "Detailed changes:"
+          git diff --cached --stat
         fi
 
     - name: Commit and push changes
       if: steps.check_changes.outputs.has_changes == 'true'
       run: |
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Committing changes..."
+        
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git commit -m "Update CloudFlare IP ranges ($(date -u '+%Y-%m-%d %H:%M:%S UTC'))
         
-        - Total IP ranges: $(wc -l < cfips.txt)
-        - IPv4: $(wc -l < cfipv4.txt)
-        - IPv6: $(wc -l < cfipv6.txt)"
-        git push origin HEAD:${{ github.ref_name }}
-        echo "Changes pushed to repository"
+        # 从临时文件读取统计信息
+        ipv4_count=$(cat /tmp/ipv4_count.txt)
+        ipv6_count=$(cat /tmp/ipv6_count.txt)
+        total_count=$(cat /tmp/total_count.txt)
+        timestamp=$(cat /tmp/timestamp.txt)
+        
+        commit_msg="Update CloudFlare IP ranges ($timestamp)
 
-    - name: Upload IP files as artifacts
+        • Total IP ranges: $total_count
+        • IPv4 ranges: $ipv4_count
+        • IPv6 ranges: $ipv6_count
+
+        Auto-updated by GitHub Actions workflow"
+        
+        git commit -m "$commit_msg"
+        git push origin HEAD:${{ github.ref_name }}
+        
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Changes pushed successfully"
+        echo "Commit SHA: $(git rev-parse HEAD)"
+
+    - name: Skip commit (no changes)
+      if: steps.check_changes.outputs.has_changes == 'false'
+      run: |
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] No changes detected, skipping commit"
+        echo "All CloudFlare IP ranges are already up to date"
+        
+        # 显示当前统计信息
+        ipv4_count=$(cat /tmp/ipv4_count.txt)
+        ipv6_count=$(cat /tmp/ipv6_count.txt)
+        total_count=$(cat /tmp/total_count.txt)
+        timestamp=$(cat /tmp/timestamp.txt)
+        
+        echo "Current status:"
+        echo "- IPv4 ranges: $ipv4_count"
+        echo "- IPv6 ranges: $ipv6_count"
+        echo "- Total ranges: $total_count"
+        echo "- Last check: $timestamp"
+
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: cloudflare-ip-ranges
-        path: |
-          cfipv4.txt
-          cfipv6.txt
-          cfips.txt
-          version.txt
+        path: cfips/
         retention-days: 30
+      if: always()
+
+    - name: Cleanup temporary files
+      if: always()
+      run: |
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Cleaning up temporary files..."
+        rm -f /tmp/ipv4_count.txt /tmp/ipv6_count.txt /tmp/total_count.txt /tmp/timestamp.txt
+        echo "Cleanup completed"
+
+    - name: Workflow summary
+      run: |
+        echo ""
+        echo "=========================================="
+        echo "CLOUDFLARE IP RANGES UPDATE - SUMMARY"
+        echo "=========================================="
+        echo "Workflow: ${{ github.workflow }}"
+        echo "Run ID: ${{ github.run_id }}"
+        echo "Run URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        echo ""
+        
+        if [[ "${{ steps.check_changes.outputs.has_changes }}" == "true" ]]; then
+          echo "✅ RESULT: IP ranges updated successfully"
+          echo "📊 Status: Changes were detected and committed"
+          echo "🕒 Time: $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')"
+        else
+          echo "✅ RESULT: IP ranges are up to date"
+          echo "📊 Status: No changes needed"
+          echo "🕒 Time: $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')"
+        fi
+        
+        echo "📁 Files updated in: cfips/"
+        echo "📦 Artifact: cloudflare-ip-ranges"
+        echo "=========================================="

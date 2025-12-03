@@ -2,12 +2,12 @@ name: Process Multiple IPv6 Sources
 
 on:
   schedule:
-    - cron: '0 */6 * * *'  # 每6小时运行一次
+    - cron: '56 3 * * *'  
   workflow_dispatch:
   push:
     branches: [ main, master ]
     paths:
-      - '.github/workflows/process-ipv6.yml'
+      - '.github/workflows/dealwith-ipv6.yml'
       - 'best_cf_ipv6.txt'
 
 permissions:
