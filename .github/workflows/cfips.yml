@@ -29,24 +29,101 @@ jobs:
     - name: Download CloudFlare IPv4 ranges
       run: |
         echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Downloading CloudFlare IPv4 ranges..."
-        curl -s "https://www.cloudflare.com/ips-v4" -o cfips/cfipv4.txt
+        # 使用 -L 跟随重定向，确保获取完整内容
+        curl -s -L "https://www.cloudflare.com/ips-v4" -o cfips/cfipv4_raw.txt
+        # 清理文件：移除空行、注释，确保每行只有一个IP段
+        grep -v '^#' cfips/cfipv4_raw.txt | grep -v '^$' | sed 's/\r//g' | awk '{print $1}' | grep -E '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}' > cfips/cfipv4.txt
         ipv4_count=$(wc -l < cfips/cfipv4.txt)
-        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Downloaded $ipv4_count IPv4 ranges"
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Downloaded and cleaned $ipv4_count IPv4 ranges"
 
     - name: Download CloudFlare IPv6 ranges
       run: |
         echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Downloading CloudFlare IPv6 ranges..."
-        curl -s "https://www.cloudflare.com/ips-v6" -o cfips/cfipv6.txt
+        # 使用 -L 跟随重定向，确保获取完整内容
+        curl -s -L "https://www.cloudflare.com/ips-v6" -o cfips/cfipv6_raw.txt
+        # 清理文件：移除空行、注释，确保每行只有一个IP段
+        grep -v '^#' cfips/cfipv6_raw.txt | grep -v '^$' | sed 's/\r//g' | awk '{print $1}' | grep -E '^[a-fA-F0-9:]+/[0-9]{1,3}' > cfips/cfipv6.txt
         ipv6_count=$(wc -l < cfips/cfipv6.txt)
-        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Downloaded $ipv6_count IPv6 ranges"
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Downloaded and cleaned $ipv6_count IPv6 ranges"
+
+    - name: Validate downloaded files
+      run: |
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Validating downloaded files..."
+        
+        echo "=== Checking IPv4 file ==="
+        echo "Total lines in cfipv4_raw.txt: $(wc -l < cfips/cfipv4_raw.txt)"
+        echo "Total lines in cfipv4.txt: $(wc -l < cfips/cfipv4.txt)"
+        echo "Sample IPv4 entries:"
+        head -5 cfips/cfipv4.txt
+        
+        echo ""
+        echo "=== Checking IPv6 file ==="
+        echo "Total lines in cfipv6_raw.txt: $(wc -l < cfips/cfipv6_raw.txt)"
+        echo "Total lines in cfipv6.txt: $(wc -l < cfips/cfipv6.txt)"
+        echo "Sample IPv6 entries:"
+        head -5 cfips/cfipv6.txt
+        
+        # 检查是否有混合行
+        echo ""
+        echo "=== Checking for mixed lines ==="
+        if grep -E '^[0-9].*:[a-fA-F0-9]' cfips/cfipv4.txt cfips/cfipv6.txt 2>/dev/null; then
+          echo "WARNING: Found mixed IPv4/IPv6 lines!"
+        else
+          echo "No mixed IPv4/IPv6 lines found."
+        fi
 
     - name: Merge IP ranges to cfips.txt
       run: |
         echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Merging IPv4 and IPv6 ranges..."
-        # 合并并清理数据
-        cat cfips/cfipv4.txt cfips/cfipv6.txt | awk 'NF && !/^#/ && !/^\s*$/ {print $0}' | sort -u > cfips/cfips.txt
+        
+        # 方法1：使用cat合并，然后进行清理
+        echo "Method 1: Simple merge"
+        cat cfips/cfipv4.txt cfips/cfipv6.txt > cfips/cfips_temp1.txt
+        
+        # 方法2：逐行处理，确保每行只有一个CIDR
+        echo "Method 2: Process each line carefully"
+        {
+          # 处理IPv4文件
+          while IFS= read -r line; do
+            # 移除所有空白字符，然后按空格分割
+            cleaned=$(echo "$line" | tr -d '\r' | xargs)
+            for item in $cleaned; do
+              # 只输出有效的CIDR
+              if echo "$item" | grep -qE '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}$'; then
+                echo "$item"
+              fi
+            done
+          done < cfips/cfipv4_raw.txt
+          
+          # 处理IPv6文件
+          while IFS= read -r line; do
+            # 移除所有空白字符，然后按空格分割
+            cleaned=$(echo "$line" | tr -d '\r' | xargs)
+            for item in $cleaned; do
+              # 只输出有效的IPv6 CIDR
+              if echo "$item" | grep -qE '^[a-fA-F0-9:]+/[0-9]{1,3}$'; then
+                echo "$item"
+              fi
+            done
+          done < cfips/cfipv6_raw.txt
+        } | sort -u > cfips/cfips.txt
+        
         total_count=$(wc -l < cfips/cfips.txt)
-        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Merged complete: $total_count total ranges"
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Merged complete: $total_count total unique ranges"
+        
+        # 验证合并结果
+        echo ""
+        echo "=== Validation of merged file ==="
+        echo "Total lines in cfips.txt: $(wc -l < cfips/cfips.txt)"
+        echo "Checking for any mixed lines in cfips.txt:"
+        if grep -E '^[0-9].*:[a-fA-F0-9]' cfips/cfips.txt; then
+          echo "ERROR: Found mixed IPv4/IPv6 lines in merged file!"
+          echo "First few problematic lines:"
+          grep -E '^[0-9].*:[a-fA-F0-9]' cfips/cfips.txt | head -5
+          exit 1
+        else
+          echo "✓ No mixed IPv4/IPv6 lines found in merged file."
+        fi
 
     - name: Generate statistics for logging
       run: |
@@ -69,28 +146,31 @@ jobs:
         echo "$total_count" > /tmp/total_count.txt
         echo "$timestamp" > /tmp/timestamp.txt
 
-    - name: Preview file contents
+    - name: Preview final results
       run: |
-        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] File preview:"
+        echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Final file preview:"
         echo ""
-        echo "=== cfipv4.txt (first 5 lines) ==="
-        head -5 cfips/cfipv4.txt
+        echo "=== cfipv4.txt (first 10 lines) ==="
+        head -10 cfips/cfipv4.txt
         echo ""
-        echo "=== cfipv6.txt (first 5 lines) ==="
-        head -5 cfips/cfipv6.txt
+        echo "=== cfipv6.txt (first 10 lines) ==="
+        head -10 cfips/cfipv6.txt
         echo ""
-        echo "=== cfips.txt (first 10 lines) ==="
-        head -10 cfips/cfips.txt
+        echo "=== cfips.txt (first 15 lines) ==="
+        head -15 cfips/cfips.txt
+        echo ""
+        echo "=== cfips.txt (last 10 lines) ==="
+        tail -10 cfips/cfips.txt
         echo ""
         echo "=== File sizes ==="
-        ls -lh cfips/
+        ls -lh cfips/*.txt
 
     - name: Check for changes
       id: check_changes
       run: |
         echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Checking for file changes..."
         
-        # 添加要跟踪的文件
+        # 只添加清理后的文件，不添加原始文件
         git add cfips/cfipv4.txt cfips/cfipv6.txt cfips/cfips.txt
         
         # 检查是否有变更
@@ -109,7 +189,7 @@ jobs:
           echo "Changes summary:"
           git diff --cached --name-only
           echo ""
-          echo "Detailed changes:"
+          echo "Line count changes:"
           git diff --cached --stat
         fi
 
@@ -171,6 +251,9 @@ jobs:
       if: always()
       run: |
         echo "[$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S %Z')] Cleaning up temporary files..."
+        # 清理原始文件
+        rm -f cfips/cfipv4_raw.txt cfips/cfipv6_raw.txt cfips/cfips_temp1.txt
+        # 清理临时统计文件
         rm -f /tmp/ipv4_count.txt /tmp/ipv6_count.txt /tmp/total_count.txt /tmp/timestamp.txt
         echo "Cleanup completed"
 
