@@ -1,0 +1,22 @@
+## 可以是文本数据。域名匹配规则详见下文。
+#- "google.com"
+#- "keyword:google"
+#- "regexp:.+\.google\.com$"
+
+## 可以是由 data-provider 提供的外部数据，格式 "provider:tag"。
+# 外部数据可以是包含多条文本数据的纯文本数据。
+#- "provider:data_tag"  
+# 也可以是 v2ray 域名数据。多个标签用 "," 分割，标签后支持用 "@" 只载入有对应 attr 的数据。
+# 多个 "@" 为"或"关系，域名只要有其中任意 attr 就会被载入。
+#- "provider:geosite:cn@attr@attr,us@attr..."
+
+
+
+#以 domain: 开头，域匹配。e.g: domain:google.com 会匹配自身 google.com，以及其子域名 www.google.com, maps.l.google.com 等。
+#以 full: 开头，完整匹配。e.g: full:google.com 只会匹配自身。
+#以 keyword: 开头，关键字匹配。e.g: keyword:google.com 会匹配包含这个字段的域名，如 google.com.hk, www.google.com.hk。
+#以 regexp: 开头，正则匹配(Golang 标准)。e.g: regexp:.+\.google\.com$。
+
+
+domain:yegetables.com
+domain:yegetables.cloudns.ch
