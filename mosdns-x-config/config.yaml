@@ -38,6 +38,9 @@ data_providers:
   - tag: ddnslist
     file: ./ddns.txt
     auto_reload: true
+  - tag: client_proxy_ip
+    file: ./clientip.txt
+    auto_reload: true
 
 plugins:
   # 缓存的插件
@@ -47,7 +50,7 @@ plugins:
     args:
       size: 8192
       #redis: "redis://127.0.0.1:6379/0"
-      lazy_cache_ttl: 86400
+      lazy_cache_ttl: 86400 # 建议值 86400（1天）~ 259200（3天）
       cache_everything: true
       lazy_cache_reply_ttl: 1
   - tag: cache_wan
@@ -71,7 +74,9 @@ plugins:
   - tag: ecs_auto
     type: ecs
     args:
-      auto: true
+      auto: false           # 是否自动将用户请求的来源地址作为 ECS 附加到请求。
+                            # 如果为 true，则预设地址不会被使用。
+                            # 仅适用于公网的服务器。本地运行不要启用这个功能。
       force_overwrite: false
       
   # 指定ECS的插件
@@ -80,15 +85,15 @@ plugins:
     type: ecs
     args:
       auto: false
-      ipv4: "101.6.6.0"
-      ipv6: "2001:da8::"
-      force_overwrite: false
+      ipv4: "111.21.0.0" # 中国 陕西 宝鸡  移动
+      ipv6: "2409:8a7a:29b6:5600:c38:358d:a306:c5d5" # 	中国 宁夏回族自治区 移动
+      force_overwrite: false #如果请求已有 ECS，是否强制覆盖。
   - tag: ecs_global
     type: ecs
     args:
       auto: false
-      ipv4: "168.95.1.0"
-      ipv6: "2001:b000:168::"
+      ipv4: "168.95.1.0" # 中国台湾省台北市
+      ipv6: "2001:b000:168::" # 	中国 台湾省 中華電信
       force_overwrite: true
 
   # 匹配ECS的插件
@@ -96,8 +101,8 @@ plugins:
     type: query_matcher
     args:
       ecs: 
-        - "101.6.6.0/24"
-        - "2001:da8::/48"
+        - "111.21.0.0/24"
+        - "2409:8a7a:29b6:5600::/48"
   - tag: ecs_is_lan
     type: query_matcher
     args:
@@ -238,6 +243,13 @@ plugins:
       domain:
         - "provider:ddnslist"
 
+  # 匹配是不是需要代理的客户端的插件
+  - tag: query_is_proxy_client
+    type: query_matcher
+    args:
+      client_ip:
+        - "provider:client_proxy_ip"
+
   # 匹配本地IP的插件
   - tag: response_has_china_ip
     type: response_matcher
@@ -310,7 +322,6 @@ plugins:
   - tag: black_hole_cf
     type: "blackhole"
     args:
-      # rcode: 0      
       ipv4: 
         - "104.18.4.27"
         # https://www.wetest.vip/page/cloudflare/address_v4.html
