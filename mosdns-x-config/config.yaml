@@ -26,11 +26,11 @@ data_providers:
   - tag: cfips
     file: ./rules/cfips.txt
     auto_reload: true
-  - tag: ecscn
-    file: ./ecs_cn_domain.txt
+  - tag: forcecn
+    file: ./force_cn_domain.txt
     auto_reload: true
-  - tag: ecsnoncn
-    file: ./ecs_noncn_domain.txt
+  - tag: forcenoncn
+    file: ./force_noncn_domain.txt
     auto_reload: true
   - tag: hosts
     file: ./hosts.txt
@@ -119,7 +119,7 @@ plugins:
         - "::1/128"
         - "fc00::/7"
         - "fe80::/10"
-  - tag: ecs_is_cn
+  - tag: ecs_is_chinaip
     type: query_matcher
     args:
       ecs: 
@@ -183,27 +183,27 @@ plugins:
       ipv6: "::"
 
   # 匹配无效域名的插件
-  - tag: query_is_non_domain
+  - tag: query_is_error_domain
     type: query_matcher
     args:
       domain:
         - "keyword::"
 
-  # 匹配本地域名的插件
-  - tag: query_is_local_domain
+  # 匹配国内域名的插件
+  - tag: query_is_china_domain
     type: query_matcher
     args:
       domain:
         - "provider:chinalist"
 
   # 匹配污染域名的插件
-  - tag: query_is_non_local_domain
+  - tag: query_is_gfw_domain
     type: query_matcher
     args:
       domain:
         - "provider:gfwlist"
 
-  # 匹配CDN域名的插件
+  # 匹配CDN国内域名的插件
   - tag: query_is_cdn_cn_domain
     type: query_matcher
     args:
@@ -218,18 +218,18 @@ plugins:
         - "provider:adlist"
 
   # 匹配强制本地解析域名的插件
-  - tag: query_is_cn_domain
+  - tag: query_is_force_cn_domain
     type: query_matcher
     args:
       domain:
-        - "provider:ecscn"
+        - "provider:forcecn"
 
   # 匹配强制非本地解析域名的插件
-  - tag: query_is_noncn_domain
+  - tag: query_is_force_noncn_domain
     type: query_matcher
     args:
       domain:
-        - "provider:ecsnoncn"
+        - "provider:forcenoncn"
 
   # 匹配ddns域名的插件
   - tag: query_is_ddns_domain
@@ -239,7 +239,7 @@ plugins:
         - "provider:ddnslist"
 
   # 匹配本地IP的插件
-  - tag: response_has_local_ip
+  - tag: response_has_china_ip
     type: response_matcher
     args:
       ip:
@@ -344,7 +344,7 @@ plugins:
         - hosts # 域名映射IP
 
         # 屏蔽TYPE65与无效类型请求
-        - if: "[qtype65] || (query_is_non_domain)"
+        - if: "[qtype65] || (query_is_error_domain)"
           exec:
             - _new_nxdomain_response
             - _return
@@ -369,15 +369,15 @@ plugins:
           else_exec: 
             - cache_wan
 
-        # 强制用本地服务器解析
-        - if: query_is_cn_domain
+        # 强制用本地服务器解析 force_cn_domain
+        - if: query_is_force_cn_domain
           exec:
             - forward_cn
             - ttl_5m
             - has_resp_sequence
 
-        # 强制用非本地服务器解析
-        - if: query_is_noncn_domain
+        # 强制用非本地服务器解析 force_noncn_domain
+        - if: query_is_force_noncn_domain
           exec:
             # 优先返回ipv4结果
             - _prefer_ipv4
@@ -400,8 +400,8 @@ plugins:
             - ttl_1h
             - _return
 
-        # 已知的本地域名或CDN域名用本地服务器解析  rules/
-        - if: "(query_is_local_domain) || (query_is_cdn_cn_domain)"
+        # 已知的国内域名或CDN域名用本地服务器解析  rules/china_domain && rules/cdn_domain
+        - if: "(query_is_china_domain) || (query_is_cdn_cn_domain)"
           exec:
             # 默认用本地服务器
             - forward_cn
@@ -414,7 +414,7 @@ plugins:
             - has_resp_sequence
 
         # 已知的污染域名用分流服务器或远程服务器解析 rules/gfw
-        - if: query_is_non_local_domain
+        - if: query_is_gfw_domain
           exec:
             # 优先返回ipv4结果
             - _prefer_ipv4
@@ -437,7 +437,7 @@ plugins:
             # 默认用分流服务器
             - ecs_local
             - forward_easymosdns
-            - if: "(ecs_is_local) && (response_has_local_ip) || [response_server_failed]"
+            - if: "(ecs_is_local) && (response_has_china_ip) || [response_server_failed]"
               exec:
                 - _no_ecs
                 - forward_cn
@@ -445,7 +445,7 @@ plugins:
           secondary:
             # 超时用本地分流器
             - forward_remote
-            - if: response_has_local_ip
+            - if: response_has_china_ip
               exec:
                 - forward_cn
                 - has_resp_sequence
